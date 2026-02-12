@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 const SignupForm = () => {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -32,9 +36,12 @@ const SignupForm = () => {
         if (errors[name]) {
             setErrors((prev) => ({ ...prev, [name]: '' }));
         }
+        if (errors.firebase) {
+            setErrors((prev) => ({ ...prev, firebase: '' }));
+        }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const validationErrors = validate();
         if (Object.keys(validationErrors).length > 0) {
@@ -43,12 +50,33 @@ const SignupForm = () => {
         }
 
         setIsLoading(true);
-        // Simulate API call
-        setTimeout(() => {
-            setIsLoading(false);
+        setErrors({});
+
+        try {
+            await createUserWithEmailAndPassword(auth, formData.email, formData.password);
             setIsSuccess(true);
-            console.log('Form submitted:', formData);
-        }, 1500);
+            console.log('Firebase user created successfully');
+        } catch (error) {
+            console.error('Firebase signup error:', error);
+            const newErrors = {};
+
+            switch (error.code) {
+                case 'auth/email-already-in-use':
+                    newErrors.email = 'This email is already in use';
+                    break;
+                case 'auth/invalid-email':
+                    newErrors.email = 'Invalid email address';
+                    break;
+                case 'auth/weak-password':
+                    newErrors.password = 'Password is too weak';
+                    break;
+                default:
+                    newErrors.firebase = 'An unexpected error occurred. Please try again.';
+            }
+            setErrors(newErrors);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     if (isSuccess) {
@@ -59,13 +87,13 @@ const SignupForm = () => {
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Account Created!</h2>
                 <p className="text-gray-600 dark:text-gray-400 mb-8">
-                    Welcome to ScholarSync. You can now start searching for academic papers.
+                    Welcome to ScholarSync. Your account has been created successfully.
                 </p>
                 <button
-                    onClick={() => window.location.href = '/'}
+                    onClick={() => navigate('/login')}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-lg shadow-blue-500/25"
                 >
-                    Go to Dashboard
+                    Go to Login
                 </button>
             </div>
         );
@@ -74,11 +102,18 @@ const SignupForm = () => {
     return (
         <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 w-full max-w-md transition-all">
             <div className="text-center mb-10">
-                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Create Account</h2>
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 font-inter">Create Account</h2>
                 <p className="text-gray-500 dark:text-gray-400">Join ScholarSync today</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+                {errors.firebase && (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-600 dark:text-red-400 text-sm animate-in fade-in transition-all">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{errors.firebase}</span>
+                    </div>
+                )}
+
                 <div>
                     <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                         Email Address
@@ -142,9 +177,13 @@ const SignupForm = () => {
 
                 <p className="text-center text-sm text-gray-500 dark:text-gray-400">
                     Already have an account?{' '}
-                    <a href="#" className="font-semibold text-blue-600 hover:text-blue-500 transition-colors">
+                    <button
+                        type="button"
+                        onClick={() => navigate('/login')}
+                        className="font-semibold text-blue-600 hover:text-blue-500 transition-colors outline-none"
+                    >
                         Log in
-                    </a>
+                    </button>
                 </p>
             </form>
         </div>
@@ -152,3 +191,4 @@ const SignupForm = () => {
 };
 
 export default SignupForm;
+
