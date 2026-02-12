@@ -61,3 +61,5 @@ Once the server is running, visit:
 - `GET /api/random-quote` - Generate random quote using Gemini LLM
 
 For detailed setup instructions, see the main [README.md](../README.md) file.
+
+Project setup completed successfully.
