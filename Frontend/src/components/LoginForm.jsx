@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 const LoginForm = () => {
+    const navigate = useNavigate();
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -29,9 +32,12 @@ const LoginForm = () => {
         if (errors[name]) {
             setErrors((prev) => ({ ...prev, [name]: '' }));
         }
+        if (errors.firebase) {
+            setErrors((prev) => ({ ...prev, firebase: '' }));
+        }
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const validationErrors = validate();
         if (Object.keys(validationErrors).length > 0) {
@@ -40,24 +46,55 @@ const LoginForm = () => {
         }
 
         setIsLoading(true);
-        // Simulate API call
-        setTimeout(() => {
+        setErrors({});
+
+        try {
+            await signInWithEmailAndPassword(auth, formData.email, formData.password);
+            console.log('User logged in successfully');
+            navigate('/dashboard');
+        } catch (error) {
+            console.error('Firebase login error:', error);
+            const newErrors = {};
+
+            switch (error.code) {
+                case 'auth/invalid-credential':
+                    newErrors.firebase = 'Invalid email or password';
+                    break;
+                case 'auth/user-not-found':
+                    newErrors.email = 'User not found';
+                    break;
+                case 'auth/wrong-password':
+                    newErrors.password = 'Incorrect password';
+                    break;
+                case 'auth/too-many-requests':
+                    newErrors.firebase = 'Too many failed attempts. Please try again later.';
+                    break;
+                default:
+                    newErrors.firebase = 'An unexpected error occurred. Please try again.';
+            }
+            setErrors(newErrors);
+        } finally {
             setIsLoading(false);
-            console.log('Login submitted:', formData);
-            alert('Login simulated successful. Check console for details.');
-        }, 1500);
+        }
     };
 
     return (
         <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 w-full max-w-md transition-all">
             <div className="text-center mb-10">
-                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Welcome Back</h2>
+                <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 font-inter">Welcome Back</h2>
                 <p className="text-gray-500 dark:text-gray-400">Log in to your account</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+                {errors.firebase && (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-600 dark:text-red-400 text-sm animate-in fade-in transition-all">
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{errors.firebase}</span>
+                    </div>
+                )}
+
                 <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 font-inter">
                         Email Address
                     </label>
                     <div className="relative">
@@ -132,3 +169,4 @@ const LoginForm = () => {
 };
 
 export default LoginForm;
+
