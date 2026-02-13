@@ -1,6 +1,8 @@
 import os
 import json
 import time
+import sqlite3
+from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
 
@@ -24,6 +26,35 @@ if not api_key:
     raise Exception("GOOGLE_API_KEY not found in .env file")
 
 genai.configure(api_key=api_key)
+
+
+# ==============================
+# 🗄️ DATABASE INITIALIZATION
+# ==============================
+
+DB_PATH = "papers.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS saved_papers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paper_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            authors TEXT NOT NULL,
+            abstract TEXT,
+            publication_date TEXT,
+            doi TEXT,
+            user_id TEXT NOT NULL,
+            reading_list_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
 
 
 # ==============================
@@ -64,6 +95,7 @@ limiter = RateLimiter(requests_per_minute=20)
 # ==============================
 
 class Paper(BaseModel):
+    id: str
     title: str
     authors: List[str]
     abstract: str
@@ -74,12 +106,21 @@ class SearchRequest(BaseModel):
     query: str
     databases: Optional[List[str]] = None
 
+class SavePaperRequest(BaseModel):
+    paper: Paper
+    reading_list_id: Optional[int] = None
+
+class ReadingList(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+
 
 # ==============================
 # 🚀 FASTAPI APP INIT
 # ==============================
 
-app = FastAPI(title="Academic Paper Finder API", version="0.2.0")
+app = FastAPI(title="Academic Paper Finder API", version="0.3.0")
 
 
 # ==============================
@@ -120,6 +161,20 @@ async def random_quote():
             "quote": "Stay hungry, stay foolish."
         }
     }
+
+
+# ==============================
+# 📂 READING LISTS ENDPOINT
+# ==============================
+
+@app.get("/api/reading-lists", response_model=List[ReadingList])
+async def get_reading_lists():
+    # Mock reading lists for now
+    return [
+        {"id": 1, "name": "AI Ethics", "description": "Papers about AI ethics and policy"},
+        {"id": 2, "name": "Medical AI", "description": "Healthcare applications of AI"},
+        {"id": 3, "name": "Generative Models", "description": "LLMs and Diffusion models"}
+    ]
 
 
 # ==============================
@@ -172,7 +227,6 @@ async def search_papers(request: SearchRequest, client_request: Request):
             raise Exception("Empty response from Gemini")
 
         # 5. Parse and Clean Response
-        # Strip potential markdown code blocks if the LLM ignores the instruction
         clean_text = response.text.strip()
         if clean_text.startswith("```json"):
             clean_text = clean_text[7:]
@@ -182,8 +236,14 @@ async def search_papers(request: SearchRequest, client_request: Request):
 
         raw_results = json.loads(clean_text)
 
-        # 6. Validate with Pydantic
-        validated_papers = [Paper(**p) for p in raw_results]
+        # 6. Validate with Pydantic and generate IDs
+        validated_papers = []
+        for i, p in enumerate(raw_results):
+            paper_data = p.copy()
+            # Generate a simple ID based on DOI or index if DOI is missing
+            paper_id = paper_data.get("doi", f"paper_{int(time.time())}_{i}")
+            paper_data["id"] = paper_id
+            validated_papers.append(Paper(**paper_data))
 
         return {
             "success": True,
@@ -197,11 +257,58 @@ async def search_papers(request: SearchRequest, client_request: Request):
             detail="Failed to parse structured data from Gemini"
         )
     except Exception as e:
-        # Catch validation errors or API failures
         raise HTTPException(
             status_code=500,
             detail=f"Gemini API Error: {str(e)}"
         )
+
+
+# ==============================
+# 💾 SAVE PAPER FEATURE (#11)
+# ==============================
+
+@app.post("/api/papers/{paper_id}/save")
+async def save_paper(paper_id: str, request: SavePaperRequest):
+    # Mock authenticated user
+    mock_user_id = "user_123"
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Check if the paper is already saved for this user
+        cursor.execute("SELECT id FROM saved_papers WHERE paper_id = ? AND user_id = ?", (paper_id, mock_user_id))
+        if cursor.fetchone():
+            conn.close()
+            return {"success": True, "message": "Paper was already saved"}
+
+        # Insert paper metadata
+        cursor.execute("""
+            INSERT INTO saved_papers 
+            (paper_id, title, authors, abstract, publication_date, doi, user_id, reading_list_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            paper_id,
+            request.paper.title,
+            ", ".join(request.paper.authors),
+            request.paper.abstract,
+            request.paper.publication_date,
+            request.paper.doi,
+            mock_user_id,
+            request.reading_list_id
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "message": "Paper saved successfully",
+            "paper_id": paper_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
 
 
 # ==============================
