@@ -1,13 +1,41 @@
 import React, { useState } from 'react';
 import { Search, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-const SearchBar = ({ onSearch, isLoading }) => {
+const SearchBar = ({ onSearch, isLoading: externalLoading }) => {
     const [query, setQuery] = useState('');
+    const [selectedDatabases, setSelectedDatabases] = useState(['arxiv']);
+    const [isSearching, setIsSearching] = useState(false);
+    const navigate = useNavigate();
 
-    const handleSubmit = (e) => {
+    const isLoading = externalLoading || isSearching;
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (query.trim()) {
-            onSearch(query);
+        if (!query.trim() || isLoading) return;
+
+        setIsSearching(true);
+        try {
+            const response = await fetch("http://127.0.0.1:8000/api/search", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    query: query,
+                    databases: selectedDatabases,
+                }),
+            });
+
+            const data = await response.json();
+            console.log("Search Results:", data);
+
+            navigate("/search", { state: { results: data.results } });
+
+        } catch (error) {
+            console.error("Search error:", error);
+        } finally {
+            setIsSearching(false);
         }
     };
 

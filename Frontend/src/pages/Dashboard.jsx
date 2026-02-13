@@ -5,17 +5,6 @@ import SearchBar from '../components/SearchBar';
 import PaperList from '../components/PaperList';
 
 const Dashboard = () => {
-    const [isSearching, setIsSearching] = useState(false);
-
-    const handleSearch = (query) => {
-        setIsSearching(true);
-        console.log('Searching for:', query);
-        // Simulate API call delay
-        setTimeout(() => {
-            setIsSearching(false);
-        }, 1500);
-    };
-
     return (
         <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300 flex flex-col font-inter">
             <Navbar />
@@ -35,7 +24,7 @@ const Dashboard = () => {
                         </p>
                     </div>
 
-                    <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+                    <SearchBar />
                 </section>
 
                 <div className="h-px bg-gradient-to-r from-transparent via-gray-200 dark:via-gray-800 to-transparent mb-16"></div>
