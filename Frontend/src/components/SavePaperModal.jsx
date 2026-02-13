@@ -45,6 +45,8 @@ const SavePaperModal = ({ paper, isOpen, onClose, onSave }) => {
             if (response.ok) {
                 setStatus('success');
                 if (onSave) onSave();
+                // Dispatch event to refresh PaperList
+                window.dispatchEvent(new Event('paperSaved'));
                 setTimeout(() => {
                     onClose();
                 }, 2000);

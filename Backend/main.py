@@ -178,6 +178,54 @@ async def get_reading_lists():
 
 
 # ==============================
+# 📄 SAVED PAPERS ENDPOINT (#12)
+# ==============================
+
+@app.get("/api/papers")
+async def get_saved_papers():
+    # Mock authenticated user
+    mock_user_id = "user_123"
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row  # To return results as dictionaries
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, paper_id, title, authors, abstract, publication_date, doi, reading_list_id 
+            FROM saved_papers 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC
+        """, (mock_user_id,))
+        
+        rows = cursor.fetchall()
+        
+        papers = []
+        for row in rows:
+            papers.append({
+                "id": row["paper_id"], # Returning paper_id as the primary identifier for the frontend
+                "db_id": row["id"],
+                "title": row["title"],
+                "authors": row["authors"].split(", "),
+                "abstract": row["abstract"],
+                "publication_date": row["publication_date"],
+                "doi": row["doi"],
+                "reading_list_id": row["reading_list_id"]
+            })
+            
+        conn.close()
+        
+        return {
+            "success": True,
+            "count": len(papers),
+            "papers": papers
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
+
+
+# ==============================
 # 🔎 SEARCH FEATURE (#10)
 # ==============================
 
