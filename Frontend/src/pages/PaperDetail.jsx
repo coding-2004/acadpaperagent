@@ -4,7 +4,8 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PaperDetail from '../components/PaperDetail';
 import CitationView from '../components/CitationView';
-import { ArrowLeft, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
+import DeleteConfirmModal from '../components/DeleteConfirmModal';
 
 const PaperDetailPage = () => {
     const { id } = useParams();
@@ -17,6 +18,8 @@ const PaperDetailPage = () => {
     const [paper, setPaper] = useState(location.state?.paper || null);
     const [isLoading, setIsLoading] = useState(!location.state?.paper);
     const [error, setError] = useState(null);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const fetchPaperDetail = async () => {
         // If we already have paper data from state (e.g. search result), don't fetch
@@ -51,18 +54,53 @@ const PaperDetailPage = () => {
         }
     }, [decodedId]);
 
+    const handleDelete = async () => {
+        setIsDeleting(true);
+        try {
+            const encodedId = encodeURIComponent(paper.id);
+            const response = await fetch(`http://127.0.0.1:8000/api/papers?paper_id=${encodedId}`, {
+                method: 'DELETE',
+            });
+
+            if (response.ok) {
+                // Redirect to dashboard on success
+                navigate('/dashboard');
+            } else {
+                console.error("Failed to delete paper");
+                // Optional: show error toast/message
+            }
+        } catch (error) {
+            console.error("Error deleting paper:", error);
+        } finally {
+            setIsDeleting(false);
+            setIsDeleteModalOpen(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-white dark:bg-gray-950 transition-colors duration-300 flex flex-col font-inter">
             <Navbar />
 
             <main className="flex-grow pt-32 pb-20 px-4 max-w-5xl mx-auto w-full">
-                <button
-                    onClick={() => navigate(-1)}
-                    className="inline-flex items-center text-sm font-bold text-gray-500 hover:text-blue-600 transition-colors mb-10 group"
-                >
-                    <ArrowLeft className="w-5 h-5 mr-3 group-hover:-translate-x-1 transition-transform" />
-                    Back to previous page
-                </button>
+                <div className="flex justify-between items-center mb-10">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="inline-flex items-center text-sm font-bold text-gray-500 hover:text-blue-600 transition-colors group"
+                    >
+                        <ArrowLeft className="w-5 h-5 mr-3 group-hover:-translate-x-1 transition-transform" />
+                        Back to previous page
+                    </button>
+
+                    {paper && (
+                        <button
+                            onClick={() => setIsDeleteModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-bold rounded-xl hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                        >
+                            <Trash2 className="w-5 h-5" />
+                            Delete Paper
+                        </button>
+                    )}
+                </div>
 
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-40">
@@ -97,6 +135,14 @@ const PaperDetailPage = () => {
                     <div className="animate-in fade-in slide-in-from-bottom-5 duration-700">
                         <PaperDetail paper={paper} />
                         <CitationView paper={paper} />
+
+                        <DeleteConfirmModal
+                            isOpen={isDeleteModalOpen}
+                            onClose={() => setIsDeleteModalOpen(false)}
+                            onConfirm={handleDelete}
+                            paperTitle={paper.title}
+                            isLoading={isDeleting}
+                        />
                     </div>
                 )}
             </main>

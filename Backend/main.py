@@ -426,6 +426,55 @@ async def save_paper(request: SavePaperRequest):
 
 
 # ==============================
+# 🗑️ DELETE PAPER FEATURE (#14)
+# ==============================
+
+def delete_paper_by_id(paper_id: str, user_id: str):
+    """
+    Helper function to delete a paper if it belongs to the user.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Verify ownership
+    cursor.execute("SELECT id FROM saved_papers WHERE paper_id = ? AND user_id = ?", (paper_id, user_id))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Paper not found or access denied")
+
+    # Delete paper
+    cursor.execute("DELETE FROM saved_papers WHERE paper_id = ? AND user_id = ?", (paper_id, user_id))
+    conn.commit()
+    conn.close()
+    return True
+
+@app.delete("/api/papers")
+async def delete_paper(paper_id: str):
+    try:
+        # Mock authenticated user
+        mock_user_id = "user_123"
+        
+        # paper_id comes as query param, FastAPI handles it. 
+        # If it was still encoded by frontend, we might need unquote, 
+        # but query params are usually decoded by framework. 
+        # Let's inspect if we need it. 
+        # If frontend sends ?paper_id=10.123%2F456, FastAPI usually sees "10.123/456".
+        # Safe to keep unquote just in case? No, usually not needed for query params.
+        
+        delete_paper_by_id(paper_id, mock_user_id)
+        
+        return {
+            "success": True,
+            "message": "Paper deleted successfully",
+            "paper_id": paper_id
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database Error: {str(e)}")
+
+
+# ==============================
 # 🤖 TEST LLM ENDPOINT (LEGACY)
 # ==============================
 

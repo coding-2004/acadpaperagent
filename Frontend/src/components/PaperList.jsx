@@ -28,7 +28,7 @@ const PaperList = () => {
     useEffect(() => {
         fetchPapers();
 
-        // Optional: Listen for paper saved events to refresh the list
+        // Optional: Listen for paper saved/deleted events to refresh the list
         const handlePaperSaved = () => fetchPapers();
         window.addEventListener('paperSaved', handlePaperSaved);
 
