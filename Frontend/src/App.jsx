@@ -4,6 +4,7 @@ import Signup from './pages/Signup';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import SearchResults from './pages/SearchResults';
+import PaperDetail from './pages/PaperDetail';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -26,6 +27,14 @@ function App() {
           element={
             <ProtectedRoute>
               <SearchResults />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/papers/:id"
+          element={
+            <ProtectedRoute>
+              <PaperDetail />
             </ProtectedRoute>
           }
         />

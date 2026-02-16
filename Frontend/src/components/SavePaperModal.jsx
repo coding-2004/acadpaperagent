@@ -30,7 +30,7 @@ const SavePaperModal = ({ paper, isOpen, onClose, onSave }) => {
         setIsLoading(true);
         setStatus('loading');
         try {
-            const response = await fetch(`http://127.0.0.1:8000/api/papers/${paper.id}/save`, {
+            const response = await fetch(`http://127.0.0.1:8000/api/papers/save`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

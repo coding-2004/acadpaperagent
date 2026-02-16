@@ -1,17 +1,30 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FileText, ExternalLink, Calendar, User, Bookmark, Check } from 'lucide-react';
 import SavePaperModal from './SavePaperModal';
 
 const PaperCard = ({ paper }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
+    const navigate = useNavigate();
 
     const handleSaveSuccess = () => {
         setIsSaved(true);
     };
 
+    const handleNavigate = (e) => {
+        // Prevent navigation if clicking on icons or buttons
+        if (e.target.closest('button') || e.target.closest('a')) return;
+        // Encode ID to handle DOIs with slashes
+        navigate(`/papers/${encodeURIComponent(paper.id)}`, { state: { paper } });
+    };
+
+
     return (
-        <div className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 p-8 hover:shadow-2xl hover:shadow-blue-500/5 transition-all group">
+        <div
+            onClick={handleNavigate}
+            className="bg-white dark:bg-gray-900 rounded-3xl border border-gray-100 dark:border-gray-800 p-8 hover:shadow-2xl hover:shadow-blue-500/5 transition-all group cursor-pointer"
+        >
             <div className="flex flex-col h-full">
                 <div className="flex items-start justify-between mb-6">
                     <div className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-2xl text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">

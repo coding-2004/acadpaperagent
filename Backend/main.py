@@ -11,8 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # 🔥 Google Generative AI
-import google.generativeai as genai
-
+from google import genai
 
 # ==============================
 # 🔐 LOAD ENV VARIABLES
@@ -25,7 +24,8 @@ api_key = os.getenv("GOOGLE_API_KEY")
 if not api_key:
     raise Exception("GOOGLE_API_KEY not found in .env file")
 
-genai.configure(api_key=api_key)
+# Initialize Client
+client = genai.Client(api_key=api_key)
 
 
 # ==============================
@@ -61,9 +61,9 @@ init_db()
 # 🤖 GEMINI LLM INIT
 # ==============================
 
-# Using the SDK directly for better reliability
-# Supported models include: gemini-1.5-flash, gemini-2.5-flash
-model = genai.GenerativeModel('gemini-2.5-flash')
+# Using the new Google GenAI SDK
+# Supported models include: gemini-2.0-flash
+MODEL_ID = 'models/gemini-2.5-flash'
 
 
 # ==============================
@@ -178,8 +178,69 @@ async def get_reading_lists():
 
 
 # ==============================
-# 📄 SAVED PAPERS ENDPOINT (#12)
+# 📄 SAVED PAPERS ENDPOINT (#12, #13)
 # ==============================
+
+def get_paper_by_id(paper_id: str, user_id: str):
+    """Helper to fetch a single paper with ownership check."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # We check by paper_id (the string identifier) and user_id
+    cursor.execute("""
+        SELECT * FROM saved_papers 
+        WHERE paper_id = ? AND user_id = ?
+    """, (paper_id, user_id))
+    
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return {
+            "id": row["paper_id"],
+            "db_id": row["id"],
+            "title": row["title"],
+            "authors": row["authors"].split(", "),
+            "abstract": row["abstract"],
+            "publication_date": row["publication_date"],
+            "doi": row["doi"],
+            "reading_list_id": row["reading_list_id"],
+            "created_at": row["created_at"]
+        }
+    return None
+
+
+from urllib.parse import unquote
+
+@app.get("/api/papers/{paper_id}")
+async def get_paper_detail(paper_id: str):
+    # Decode ID to handle slashes in DOIs
+    paper_id = unquote(paper_id)
+
+    # Mock authenticated user
+    mock_user_id = "user_123"
+    
+    paper = get_paper_by_id(paper_id, mock_user_id)
+    
+    if not paper:
+        # Check if it exists for another user for 403 (Security Requirement)
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM saved_papers WHERE paper_id = ?", (paper_id,))
+        exists_for_other = cursor.fetchone()
+        conn.close()
+        
+        if exists_for_other:
+            raise HTTPException(status_code=403, detail="Access denied to this paper")
+        else:
+            raise HTTPException(status_code=404, detail="Paper not found")
+            
+    return {
+        "success": True,
+        "paper": paper
+    }
+
 
 @app.get("/api/papers")
 async def get_saved_papers():
@@ -269,7 +330,10 @@ async def search_papers(request: SearchRequest, client_request: Request):
 
     try:
         # 4. Invoke Gemini
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=MODEL_ID,
+            contents=prompt
+        )
         
         if not response or not response.text:
             raise Exception("Empty response from Gemini")
@@ -315,8 +379,10 @@ async def search_papers(request: SearchRequest, client_request: Request):
 # 💾 SAVE PAPER FEATURE (#11)
 # ==============================
 
-@app.post("/api/papers/{paper_id}/save")
-async def save_paper(paper_id: str, request: SavePaperRequest):
+@app.post("/api/papers/save")
+async def save_paper(request: SavePaperRequest):
+    paper_id = request.paper.id
+
     # Mock authenticated user
     mock_user_id = "user_123"
     
@@ -366,7 +432,10 @@ async def save_paper(paper_id: str, request: SavePaperRequest):
 @app.get("/api/test-llm")
 async def test_llm():
     try:
-        response = model.generate_content("Say hello like an AI research assistant")
+        response = client.models.generate_content(
+            model=MODEL_ID,
+            contents="Say hello like an AI research assistant"
+        )
         return {
             "success": True,
             "response": response.text

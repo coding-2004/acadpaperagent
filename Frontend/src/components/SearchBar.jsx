@@ -10,11 +10,12 @@ const SearchBar = ({ onSearch, isLoading: externalLoading }) => {
 
     const isLoading = externalLoading || isSearching;
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!query.trim() || isLoading) return;
+    const executeSearch = async (searchQuery) => {
+        if (!searchQuery?.trim() || isLoading) return;
 
         setIsSearching(true);
+        if (onSearch) onSearch(searchQuery);
+
         try {
             const response = await fetch("http://127.0.0.1:8000/api/search", {
                 method: "POST",
@@ -22,7 +23,7 @@ const SearchBar = ({ onSearch, isLoading: externalLoading }) => {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    query: query,
+                    query: searchQuery,
                     databases: selectedDatabases,
                 }),
             });
@@ -37,6 +38,11 @@ const SearchBar = ({ onSearch, isLoading: externalLoading }) => {
         } finally {
             setIsSearching(false);
         }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        executeSearch(query);
     };
 
     return (
@@ -71,7 +77,7 @@ const SearchBar = ({ onSearch, isLoading: externalLoading }) => {
                     <button
                         key={topic}
                         type="button"
-                        onClick={() => { setQuery(topic); onSearch(topic); }}
+                        onClick={() => { setQuery(topic); executeSearch(topic); }}
                         className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
                     >
                         {topic}
