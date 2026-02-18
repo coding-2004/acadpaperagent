@@ -6,27 +6,14 @@ from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
 
+import requests
+import xml.etree.ElementTree as ET
+
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
-# 🔥 Google Generative AI
-from google import genai
-
-# ==============================
-# 🔐 LOAD ENV VARIABLES
-# ==============================
-
-load_dotenv()
-
-api_key = os.getenv("GOOGLE_API_KEY")
-
-if not api_key:
-    raise Exception("GOOGLE_API_KEY not found in .env file")
-
-# Initialize Client
-client = genai.Client(api_key=api_key)
-
+from urllib.parse import unquote
 
 # ==============================
 # 🗄️ DATABASE INITIALIZATION
@@ -58,21 +45,12 @@ init_db()
 
 
 # ==============================
-# 🤖 GEMINI LLM INIT
-# ==============================
-
-# Using the new Google GenAI SDK
-# Supported models include: gemini-2.0-flash
-MODEL_ID = 'models/gemini-2.5-flash'
-
-
-# ==============================
 # 🛡️ RATE LIMIT PROTECTOR
 # ==============================
 
 class RateLimiter:
     """Simple in-memory rate limiter to prevent API abuse."""
-    def __init__(self, requests_per_minute: int = 10):
+    def __init__(self, requests_per_minute: int = 20):
         self.requests_per_minute = requests_per_minute
         self.history = {}
 
@@ -211,8 +189,6 @@ def get_paper_by_id(paper_id: str, user_id: str):
     return None
 
 
-from urllib.parse import unquote
-
 @app.get("/api/papers/{paper_id}")
 async def get_paper_detail(paper_id: str):
     # Decode ID to handle slashes in DOIs
@@ -292,7 +268,8 @@ async def get_saved_papers():
 
 @app.post("/api/search")
 async def search_papers(request: SearchRequest, client_request: Request):
-    # 1. Rate Limiting Check
+
+    # Rate limiting
     client_ip = client_request.client.host
     if not limiter.is_allowed(client_ip):
         raise HTTPException(
@@ -300,78 +277,66 @@ async def search_papers(request: SearchRequest, client_request: Request):
             detail="Rate limit exceeded. Please wait a moment."
         )
 
-    # 2. Validation
+    # Validate query
     if not request.query.strip():
-        raise HTTPException(status_code=400, detail="Search query cannot be empty")
-
-    # 3. Gemini Prompt Construction
-    databases_str = ", ".join(request.databases) if request.databases else "various academic databases"
-    
-    prompt = f"""
-    You are an academic research assistant. 
-    Search for recent papers about: "{request.query}" in {databases_str}.
-    
-    Return a list of 5 high-quality academic papers with realistic metadata.
-    
-    CRITICAL: Return ONLY a valid JSON array of objects.
-    No explanations, no markdown code blocks, no extra text.
-    
-    Format:
-    [
-      {{
-        "title": "Full paper title",
-        "authors": ["Author One", "Author Two"],
-        "abstract": "A concise summary of the paper.",
-        "publication_date": "Year",
-        "doi": "10.xxxx/yyyy"
-      }}
-    ]
-    """
+        raise HTTPException(
+            status_code=400,
+            detail="Search query cannot be empty"
+        )
 
     try:
-        # 4. Invoke Gemini
-        response = client.models.generate_content(
-            model=MODEL_ID,
-            contents=prompt
+        url = (
+            f"http://export.arxiv.org/api/query?"
+            f"search_query=all:{request.query}"
+            f"&start=0&max_results=5"
         )
-        
-        if not response or not response.text:
-            raise Exception("Empty response from Gemini")
 
-        # 5. Parse and Clean Response
-        clean_text = response.text.strip()
-        if clean_text.startswith("```json"):
-            clean_text = clean_text[7:]
-        if clean_text.endswith("```"):
-            clean_text = clean_text[:-3]
-        clean_text = clean_text.strip()
+        response = requests.get(url)
 
-        raw_results = json.loads(clean_text)
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to fetch results from arXiv"
+            )
 
-        # 6. Validate with Pydantic and generate IDs
-        validated_papers = []
-        for i, p in enumerate(raw_results):
-            paper_data = p.copy()
-            # Generate a simple ID based on DOI or index if DOI is missing
-            paper_id = paper_data.get("doi", f"paper_{int(time.time())}_{i}")
-            paper_data["id"] = paper_id
-            validated_papers.append(Paper(**paper_data))
+        root = ET.fromstring(response.content)
+        ns = {"atom": "http://www.w3.org/2005/Atom"}
+
+        results = []
+
+        for entry in root.findall("atom:entry", ns):
+
+            id_url = entry.find("atom:id", ns).text
+            arxiv_id = id_url.split("/")[-1]
+
+            title = entry.find("atom:title", ns).text.strip()
+            abstract = entry.find("atom:summary", ns).text.strip()
+            published = entry.find("atom:published", ns).text[:4]
+
+            authors = []
+            for author in entry.findall("atom:author", ns):
+                authors.append(author.find("atom:name", ns).text)
+
+            results.append({
+                "id": arxiv_id,
+                "title": title,
+                "authors": authors,
+                "abstract": abstract,
+                "publication_date": published,
+                "doi": f"https://arxiv.org/abs/{arxiv_id}",
+                "pdf_url": f"https://arxiv.org/pdf/{arxiv_id}.pdf"
+            })
 
         return {
             "success": True,
             "query": request.query,
-            "results": validated_papers
+            "results": results
         }
 
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to parse structured data from Gemini"
-        )
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Gemini API Error: {str(e)}"
+            detail=f"arXiv API Error: {str(e)}"
         )
 
 
@@ -475,19 +440,32 @@ async def delete_paper(paper_id: str):
 
 
 # ==============================
-# 🤖 TEST LLM ENDPOINT (LEGACY)
+# 📥 PDF DOWNLOAD PROXY
 # ==============================
 
-@app.get("/api/test-llm")
-async def test_llm():
+@app.get("/api/papers/download/{paper_id}")
+def download_pdf(paper_id: str):
     try:
-        response = client.models.generate_content(
-            model=MODEL_ID,
-            contents="Say hello like an AI research assistant"
+        pdf_url = f"https://arxiv.org/pdf/{paper_id}.pdf"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+        response = requests.get(pdf_url, headers=headers)
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=404,
+                detail="PDF not found on arXiv"
+            )
+
+        return Response(
+            content=response.content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={paper_id}.pdf"
+            }
         )
-        return {
-            "success": True,
-            "response": response.text
-        }
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF download failed: {str(e)}"
+        )

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, ExternalLink, Calendar, User, Bookmark, Check, Trash2 } from 'lucide-react';
+import { FileText, ExternalLink, Calendar, User, Bookmark, Check, Trash2, Download } from 'lucide-react';
 import SavePaperModal from './SavePaperModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 
@@ -150,6 +150,13 @@ const PaperCard = ({ paper }) => {
                     <button className="text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline">
                         Read Full Abstract
                     </button>
+                    <a
+                        href={`http://127.0.0.1:8000/api/papers/download/${paper.id}`}
+                        className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"
+                        title="Download PDF"
+                    >
+                        <Download className="w-4 h-4" />
+                    </a>
                     <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${isSaved
                         ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'

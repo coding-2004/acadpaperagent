@@ -4,3 +4,4 @@ google-genai
 python-dotenv
 langchain-google-genai
 langchain
+requests

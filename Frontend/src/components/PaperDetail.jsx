@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Calendar, User, ExternalLink, Bookmark } from 'lucide-react';
+import { FileText, Calendar, User, ExternalLink, Bookmark, Download } from 'lucide-react';
 
 const PaperDetail = ({ paper }) => {
     return (
@@ -55,15 +55,24 @@ const PaperDetail = ({ paper }) => {
                     <div className="flex items-center justify-between mb-6">
                         <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Abstract</h4>
                         {paper.doi && (
-                            <a
-                                href={`https://doi.org/${paper.doi}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline"
-                            >
-                                <ExternalLink className="w-4 h-4" />
-                                View on DOI.org
-                            </a>
+                            <div className="flex gap-4">
+                                <a
+                                    href={`http://127.0.0.1:8000/api/papers/download/${paper.id}`}
+                                    className="flex items-center gap-2 text-sm font-bold text-green-600 dark:text-green-400 hover:underline"
+                                >
+                                    <Download className="w-4 h-4" />
+                                    Download PDF
+                                </a>
+                                <a
+                                    href={`https://doi.org/${paper.doi}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-sm font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                                >
+                                    <ExternalLink className="w-4 h-4" />
+                                    View on DOI.org
+                                </a>
+                            </div>
                         )}
                     </div>
                     <div className="bg-gray-50 dark:bg-gray-800/30 rounded-3xl p-8 md:p-10 border border-gray-100 dark:border-gray-800/50">
