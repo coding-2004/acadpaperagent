@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PaperDetail from '../components/PaperDetail';
 import CitationView from '../components/CitationView';
+import RelatedPapers from '../components/RelatedPapers';
 import { ArrowLeft, Loader2, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 
@@ -135,6 +136,7 @@ const PaperDetailPage = () => {
                     <div className="animate-in fade-in slide-in-from-bottom-5 duration-700">
                         <PaperDetail paper={paper} />
                         <CitationView paper={paper} />
+                        <RelatedPapers paperId={paper.id} />
 
                         <DeleteConfirmModal
                             isOpen={isDeleteModalOpen}

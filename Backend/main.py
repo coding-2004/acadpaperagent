@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import sqlite3
@@ -279,7 +280,7 @@ async def get_saved_papers():
 # ==============================
 
 @app.post("/api/search")
-async def search_papers(request: SearchRequest, client_request: Request):
+def search_papers(request: SearchRequest, client_request: Request):
 
     # Rate limiting
     client_ip = client_request.client.host
@@ -357,7 +358,7 @@ async def search_papers(request: SearchRequest, client_request: Request):
 # ==============================
 
 @app.post("/api/papers/save")
-async def save_paper(request: SavePaperRequest):
+def save_paper(request: SavePaperRequest):
     paper_id = request.paper.id
 
     # Mock authenticated user
@@ -565,11 +566,14 @@ def generate_citation_with_llm(paper: dict, fmt: str) -> str:
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
-        raise Exception(f"Gemini API Error: {str(e)}")
+        err_msg = str(e)
+        if "429" in err_msg or "ResourceExhausted" in err_msg or "Quota" in err_msg:
+             raise HTTPException(status_code=429, detail="AI request limit exceeded. Please try again later.")
+        raise Exception(f"Gemini API Error: {err_msg}")
 
 
 @app.get("/api/papers/{paper_id}/citation")
-async def get_paper_citation(paper_id: str, format: str = "APA"):
+def get_paper_citation(paper_id: str, format: str = "APA"):
     # Decode ID
     paper_id = unquote(paper_id)
     
@@ -603,10 +607,161 @@ async def get_paper_citation(paper_id: str, format: str = "APA"):
             "format": format,
             "citation": citation_text
         }
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        # Log the error behavior
-        print(f"LLM Error: {str(e)}")
+        if "429" in str(e) or "quota" in str(e).lower():
+            raise HTTPException(status_code=429, detail="AI request limit exceeded. Please try again later.")
+            
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate citation: {str(e)}"
         )
+
+
+# ==============================
+# 🔗 RELATED PAPERS FEATURE
+# ==============================
+
+def find_related_papers_with_llm(current_paper: dict, other_papers: list) -> list:
+    """
+    Uses Google Gemini to find related papers using a single BATCHED call 
+    to avoid rate limits.
+    """
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        print("GOOGLE_API_KEY not found")
+        return []
+
+    genai.configure(api_key=api_key)
+    # Use flash model for speed
+    model = genai.GenerativeModel("gemini-flash-latest")
+    
+    # 1. Prepare candidates text
+    candidates_text = ""
+    # Create a quick lookup map
+    paper_map = {p['id']: p for p in other_papers}
+    
+    for i, p in enumerate(other_papers):
+        # Truncate abstract to save tokens
+        abstract_snippet = (p['abstract'][:300] + '...') if len(p['abstract']) > 300 else p['abstract']
+        candidates_text += f"ID: {p['id']}\nTitle: {p['title']}\nAbstract: {abstract_snippet}\n\n"
+
+    # 2. Single Prompt
+    prompt = f"""
+    You are a research similarity expert.
+    
+    Target Paper:
+    Title: {current_paper['title']}
+    Abstract: {current_paper['abstract'][:500]}
+
+    Candidates:
+    {candidates_text}
+
+    Task:
+    Identify the top 3 most related papers from the Candidates list based on the Target Paper.
+    
+    Return a JSON array of objects (NO markdown formatting, just raw JSON).
+    Format:
+    [
+      {{ "id": "paper_id", "similarity": 85, "reason": "Short reason" }},
+      ...
+    ]
+    
+    If none are related, return [].
+    """
+
+    try:
+        response = model.generate_content(prompt)
+        text = response.text.strip()
+        
+        # Clean markdown if present
+        if text.startswith("```json"):
+            text = text.replace("```json", "").replace("```", "")
+        
+        results = json.loads(text)
+        
+        related_results = []
+        for res in results:
+            pid = res.get("id")
+            if pid in paper_map:
+                paper_data = paper_map[pid]
+                related_results.append({
+                    "id": paper_data["id"],
+                    "title": paper_data["title"],
+                    "authors": paper_data["authors"],
+                    "similarity": res.get("similarity", 0),
+                    "reason": res.get("reason", "Similarity detected.")
+                })
+                
+        # Sort desc
+        related_results.sort(key=lambda x: x["similarity"], reverse=True)
+        return related_results
+
+    except Exception as e:
+        print(f"Error in batch related papers: {e}")
+        # Check for rate limit here too just in case we want to propagate it
+        if "429" in str(e) or "quota" in str(e).lower():
+            raise Exception("Rate limit exceeded")
+        return []
+
+
+@app.get("/api/papers/{paper_id}/related")
+def get_related_papers(paper_id: str):
+    # Decode ID
+    paper_id = unquote(paper_id)
+    
+    # Mock user ID
+    mock_user_id = "user_123"
+
+    try:
+        # 1. Fetch current paper
+        paper = get_paper_by_id(paper_id, mock_user_id)
+        
+        if not paper:
+            paper = fetch_arxiv_details(paper_id)
+            if not paper:
+                raise HTTPException(status_code=404, detail="Paper not found")
+
+        # 2. Fetch other papers from DB
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        # Fetch up to 10 other papers to compare against
+        cursor.execute("SELECT * FROM saved_papers WHERE paper_id != ? LIMIT 10", (paper_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        
+        other_papers = []
+        for row in rows:
+            other_papers.append({
+                "id": row["paper_id"],
+                "title": row["title"],
+                "authors": row["authors"].split(", "),
+                "abstract": row["abstract"],
+                "publication_date": row["publication_date"],
+                "doi": row["doi"]
+            })
+            
+        if not other_papers:
+            return {"success": True, "count": 0, "related": []}
+
+        # 3. Use LLM to find related
+        related = find_related_papers_with_llm(paper, other_papers)
+        
+        return {
+            "success": True, 
+            "count": len(related), 
+            "related": related
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Related Papers Error: {e}")
+        # Propagate 429
+        if "429" in str(e) or "limit" in str(e).lower():
+             raise HTTPException(status_code=429, detail="AI request limit exceeded. Please try again later.")
+             
+        # Return empty list on failure instead of 500
+        return {"success": False, "count": 0, "related": [], "error": str(e)}

@@ -24,18 +24,19 @@ const CitationView = ({ paper }) => {
                 const response = await fetch(`http://127.0.0.1:8000/api/papers/${encodedId}/citation?format=${selectedFormat}`);
 
                 if (!response.ok) {
-                    throw new Error('Failed to generate citation');
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || 'Failed to generate citation');
                 }
 
                 const data = await response.json();
                 if (data.success) {
                     setCitationText(data.citation);
                 } else {
-                    throw new Error('Invalid response format');
+                    throw new Error(data.error || 'Invalid response format');
                 }
             } catch (err) {
                 console.error("Citation Error:", err);
-                setError('Failed to generate citation. Please try again.');
+                setError(err.message || 'Failed to generate citation. Please try again.');
             } finally {
                 setLoading(false);
             }
