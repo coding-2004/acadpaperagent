@@ -20,7 +20,7 @@ const SavePaperModal = ({ paper, isOpen, onClose, onSave }) => {
         try {
             const response = await fetch('http://127.0.0.1:8000/api/reading-lists');
             const data = await response.json();
-            setReadingLists(data);
+            setReadingLists(data.lists || []);
         } catch (error) {
             console.error('Error fetching reading lists:', error);
         }

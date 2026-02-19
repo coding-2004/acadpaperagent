@@ -5,6 +5,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import SearchResults from './pages/SearchResults';
 import PaperDetail from './pages/PaperDetail';
+import ReadingLists from './pages/ReadingLists';
+import ReadingListDetail from './pages/ReadingListDetail';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -35,6 +37,22 @@ function App() {
           element={
             <ProtectedRoute>
               <PaperDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reading-lists"
+          element={
+            <ProtectedRoute>
+              <ReadingLists />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reading-lists/:id"
+          element={
+            <ProtectedRoute>
+              <ReadingListDetail />
             </ProtectedRoute>
           }
         />

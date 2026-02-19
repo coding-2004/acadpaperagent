@@ -47,6 +47,15 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reading_lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            user_id TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -97,10 +106,16 @@ class SavePaperRequest(BaseModel):
     paper: Paper
     reading_list_id: Optional[int] = None
 
+class ReadingListCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
 class ReadingList(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    paper_count: int = 0
+    created_at: str
 
 
 # ==============================
@@ -158,14 +173,131 @@ async def random_quote():
 # 📂 READING LISTS ENDPOINT
 # ==============================
 
-@app.get("/api/reading-lists", response_model=List[ReadingList])
-async def get_reading_lists():
-    # Mock reading lists for now
-    return [
-        {"id": 1, "name": "AI Ethics", "description": "Papers about AI ethics and policy"},
-        {"id": 2, "name": "Medical AI", "description": "Healthcare applications of AI"},
-        {"id": 3, "name": "Generative Models", "description": "LLMs and Diffusion models"}
-    ]
+# ==============================
+# 📂 READING LISTS HELPERS
+# ==============================
+
+def create_reading_list(name: str, description: str, user_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO reading_lists (name, description, user_id) VALUES (?, ?, ?)",
+        (name, description, user_id)
+    )
+    list_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return list_id
+
+def get_all_reading_lists(user_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Get lists with paper count
+    cursor.execute("""
+        SELECT rl.*, COUNT(sp.id) as paper_count
+        FROM reading_lists rl
+        LEFT JOIN saved_papers sp ON rl.id = sp.reading_list_id
+        WHERE rl.user_id = ?
+        GROUP BY rl.id
+        ORDER BY rl.created_at DESC
+    """, (user_id,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    results = []
+    for row in rows:
+        results.append({
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"],
+            "paper_count": row["paper_count"],
+            "created_at": row["created_at"]
+        })
+    return results
+
+def get_reading_list_by_id(list_id: int, user_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM reading_lists WHERE id = ? AND user_id = ?", (list_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"],
+            "created_at": row["created_at"]
+        }
+    return None
+
+def delete_reading_list_by_id(list_id: int, user_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Check ownership
+    cursor.execute("SELECT id FROM reading_lists WHERE id = ? AND user_id = ?", (list_id, user_id))
+    if not cursor.fetchone():
+        conn.close()
+        return False
+
+    # Unassign papers
+    cursor.execute("UPDATE saved_papers SET reading_list_id = NULL WHERE reading_list_id = ?", (list_id,))
+    
+    # Delete list
+    cursor.execute("DELETE FROM reading_lists WHERE id = ?", (list_id,))
+    
+    conn.commit()
+    conn.close()
+    return True
+
+
+# ==============================
+# 📂 READING LISTS ENDPOINTS
+# ==============================
+
+@app.get("/api/reading-lists")
+async def get_reading_lists_endpoint():
+    mock_user_id = "user_123"
+    lists = get_all_reading_lists(mock_user_id)
+    return {
+        "success": True,
+        "count": len(lists),
+        "lists": lists
+    }
+
+@app.post("/api/reading-lists")
+async def create_reading_list_endpoint(list_data: ReadingListCreate):
+    mock_user_id = "user_123"
+    try:
+        new_id = create_reading_list(list_data.name, list_data.description, mock_user_id)
+        # Fetch back to return full object
+        new_list = get_reading_list_by_id(new_id, mock_user_id)
+        # Add paper_count = 0 for consistency
+        new_list["paper_count"] = 0
+        return new_list
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reading-lists/{list_id}")
+async def get_reading_list_detail(list_id: int):
+    mock_user_id = "user_123"
+    rlist = get_reading_list_by_id(list_id, mock_user_id)
+    if not rlist:
+        raise HTTPException(status_code=404, detail="Reading list not found")
+    return rlist
+
+@app.delete("/api/reading-lists/{list_id}")
+async def delete_reading_list(list_id: int):
+    mock_user_id = "user_123"
+    success = delete_reading_list_by_id(list_id, mock_user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Reading list not found or access denied")
+    return {"success": True, "message": "Reading list deleted"}
 
 
 # ==============================
@@ -232,7 +364,7 @@ async def get_paper_detail(paper_id: str):
 
 
 @app.get("/api/papers")
-async def get_saved_papers():
+async def get_saved_papers(reading_list_id: Optional[int] = None):
     # Mock authenticated user
     mock_user_id = "user_123"
     
@@ -241,12 +373,20 @@ async def get_saved_papers():
         conn.row_factory = sqlite3.Row  # To return results as dictionaries
         cursor = conn.cursor()
         
-        cursor.execute("""
+        query = """
             SELECT id, paper_id, title, authors, abstract, publication_date, doi, reading_list_id 
             FROM saved_papers 
             WHERE user_id = ? 
-            ORDER BY created_at DESC
-        """, (mock_user_id,))
+        """
+        params = [mock_user_id]
+        
+        if reading_list_id is not None:
+            query += " AND reading_list_id = ?"
+            params.append(reading_list_id)
+            
+        query += " ORDER BY created_at DESC"
+        
+        cursor.execute(query, tuple(params))
         
         rows = cursor.fetchall()
         
