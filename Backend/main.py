@@ -6,8 +6,16 @@ from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
 
+# Force load .env from current directory
+load_dotenv(override=True)
+if not os.getenv("GOOGLE_API_KEY"):
+    print("WARNING: GOOGLE_API_KEY not found in environment!")
+else:
+    print("SUCCESS: GOOGLE_API_KEY loaded.")
+
 import requests
 import xml.etree.ElementTree as ET
+import google.generativeai as genai
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
@@ -109,7 +117,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://127.0.0.1:5173"
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -468,4 +480,133 @@ def download_pdf(paper_id: str):
         raise HTTPException(
             status_code=500,
             detail=f"PDF download failed: {str(e)}"
+        )
+
+
+# ==============================
+# 🤖 LLM CITATION GENERATION
+# ==============================
+
+def fetch_arxiv_details(arxiv_id: str) -> dict:
+    """
+    Fetches paper metadata directly from arXiv API.
+    """
+    try:
+        url = f"http://export.arxiv.org/api/query?id_list={arxiv_id}"
+        response = requests.get(url)
+        if response.status_code != 200:
+            return None
+        
+        root = ET.fromstring(response.content)
+        namespace = {'atom': 'http://www.w3.org/2005/Atom'}
+        entry = root.find('atom:entry', namespace)
+        
+        if not entry:
+            return None
+            
+        title = entry.find('atom:title', namespace).text.strip().replace('\n', ' ')
+        summary = entry.find('atom:summary', namespace).text.strip().replace('\n', ' ')
+        published = entry.find('atom:published', namespace).text[:4] # Just year
+        
+        authors = []
+        for author in entry.findall('atom:author', namespace):
+            authors.append(author.find('atom:name', namespace).text)
+            
+        # Extract DOI if available
+        doi = ""
+        for link in entry.findall('atom:link', namespace):
+            if link.get('title') == 'doi':
+                doi = link.get('href')
+                
+        return {
+            "id": arxiv_id,
+            "title": title,
+            "authors": authors,
+            "publication_date": published,
+            "doi": doi,
+            "abstract": summary
+        }
+    except Exception as e:
+        print(f"Error fetching from arXiv: {e}")
+        return None
+
+def generate_citation_with_llm(paper: dict, fmt: str) -> str:
+    """
+    Uses Google Gemini (direct API) to generate an academic citation.
+    """
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise Exception("GOOGLE_API_KEY not found in environment variables")
+
+    genai.configure(api_key=api_key)
+    
+    # Use flash model for speed and cost
+    model = genai.GenerativeModel('gemini-flash-latest')
+
+    prompt = f"""
+    You are an academic citation expert.
+    Generate a citation for the following paper in {fmt} format.
+    
+    Paper Details:
+    Title: {paper['title']}
+    Authors: {", ".join(paper['authors'])}
+    Publication Year: {paper['publication_date']}
+    Journal/Source: arXiv
+    DOI: {paper['doi']}
+    URL: https://arxiv.org/abs/{paper['id']}
+
+    Rules:
+    - Return ONLY the citation text.
+    - Do NOT include any explanations, markdown, or labels.
+    - Format it strictly according to {fmt} standards.
+    """
+
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as e:
+        raise Exception(f"Gemini API Error: {str(e)}")
+
+
+@app.get("/api/papers/{paper_id}/citation")
+async def get_paper_citation(paper_id: str, format: str = "APA"):
+    # Decode ID
+    paper_id = unquote(paper_id)
+    
+    # Supported formats
+    SUPPORTED_FORMATS = ["APA", "MLA", "Chicago", "Harvard", "IEEE", "BibTeX"]
+    if format not in SUPPORTED_FORMATS:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Unsupported format. Allowed: {', '.join(SUPPORTED_FORMATS)}"
+        )
+
+    # Use existing helper to fetch paper
+    # Mock user ID as per other endpoints
+    mock_user_id = "user_123"
+    
+    # Try fetching from DB first
+    paper = get_paper_by_id(paper_id, mock_user_id)
+    
+    if not paper:
+        # If not in DB, try fetching directly from arXiv
+        paper = fetch_arxiv_details(paper_id)
+        
+        if not paper:
+             raise HTTPException(status_code=404, detail="Paper not found in library or arXiv")
+
+    try:
+        citation_text = generate_citation_with_llm(paper, format)
+        
+        return {
+            "success": True,
+            "format": format,
+            "citation": citation_text
+        }
+    except Exception as e:
+        # Log the error behavior
+        print(f"LLM Error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate citation: {str(e)}"
         )
