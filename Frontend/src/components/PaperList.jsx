@@ -3,6 +3,7 @@ import { Book, FileText, Bookmark, Loader2, AlertCircle, RefreshCw, Search } fro
 import PaperCard from './PaperCard';
 
 const PaperList = () => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const [papers, setPapers] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -11,7 +12,7 @@ const PaperList = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetch('http://127.0.0.1:8000/api/papers');
+            const response = await fetch(`${API_BASE}/api/papers`);
             if (!response.ok) {
                 throw new Error('Failed to fetch saved papers');
             }

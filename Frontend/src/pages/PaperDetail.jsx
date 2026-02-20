@@ -9,6 +9,7 @@ import { ArrowLeft, Loader2, AlertCircle, RefreshCw, Trash2 } from 'lucide-react
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 
 const PaperDetailPage = () => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const { id } = useParams();
     // Decode ID to handle DOIs
     const decodedId = decodeURIComponent(id);
@@ -32,7 +33,7 @@ const PaperDetailPage = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetch(`http://127.0.0.1:8000/api/papers/${encodeURIComponent(decodedId)}`);
+            const response = await fetch(`${API_BASE}/api/papers/${encodeURIComponent(decodedId)}`);
             if (!response.ok) {
                 if (response.status === 404) throw new Error('Paper not found or access denied');
                 if (response.status === 403) throw new Error('You do not have permission to view this paper');
@@ -59,7 +60,7 @@ const PaperDetailPage = () => {
         setIsDeleting(true);
         try {
             const encodedId = encodeURIComponent(paper.id);
-            const response = await fetch(`http://127.0.0.1:8000/api/papers?paper_id=${encodedId}`, {
+            const response = await fetch(`${API_BASE}/api/papers?paper_id=${encodedId}`, {
                 method: 'DELETE',
             });
 

@@ -5,6 +5,7 @@ import SavePaperModal from './SavePaperModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 
 const PaperCard = ({ paper }) => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isSaved, setIsSaved] = useState(false);
@@ -50,7 +51,7 @@ const PaperCard = ({ paper }) => {
         try {
             // Use query parameter to avoid path routing issues with DOIs
             const encodedId = encodeURIComponent(paper.id);
-            const response = await fetch(`http://127.0.0.1:8000/api/papers?paper_id=${encodedId}`, {
+            const response = await fetch(`${API_BASE}/api/papers?paper_id=${encodedId}`, {
                 method: 'DELETE',
             });
 
@@ -151,7 +152,7 @@ const PaperCard = ({ paper }) => {
                         Read Full Abstract
                     </button>
                     <a
-                        href={`http://127.0.0.1:8000/api/papers/download/${paper.id}`}
+                        href={`${API_BASE}/api/papers/download/${paper.id}`}
                         className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"
                         title="Download PDF"
                     >

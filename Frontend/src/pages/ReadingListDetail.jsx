@@ -6,6 +6,7 @@ import PaperCard from '../components/PaperCard';
 import { ArrowLeft, BookOpen, Loader2, AlertCircle, FileText } from 'lucide-react';
 
 const ReadingListDetail = () => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const { id } = useParams();
     const navigate = useNavigate();
 
@@ -19,13 +20,13 @@ const ReadingListDetail = () => {
         setError(null);
         try {
             // Fetch list details
-            const listResponse = await fetch(`http://127.0.0.1:8000/api/reading-lists/${id}`);
+            const listResponse = await fetch(`${API_BASE}/api/reading-lists/${id}`);
             if (!listResponse.ok) throw new Error("Reading list not found");
             const listData = await listResponse.json();
             setList(listData);
 
             // Fetch papers in this list
-            const papersResponse = await fetch(`http://127.0.0.1:8000/api/papers?reading_list_id=${id}`);
+            const papersResponse = await fetch(`${API_BASE}/api/papers?reading_list_id=${id}`);
             if (!papersResponse.ok) throw new Error("Failed to fetch papers");
             const papersData = await papersResponse.json();
             setPapers(papersData.papers || []);

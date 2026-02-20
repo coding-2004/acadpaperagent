@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, Loader2 } from 'lucide-react';
 
 const CreateListModal = ({ isOpen, onClose, onSuccess }) => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -13,7 +14,7 @@ const CreateListModal = ({ isOpen, onClose, onSuccess }) => {
         setError('');
 
         try {
-            const response = await fetch('http://127.0.0.1:8000/api/reading-lists', {
+            const response = await fetch(`${API_BASE}/api/reading-lists`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

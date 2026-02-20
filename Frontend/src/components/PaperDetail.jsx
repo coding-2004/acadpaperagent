@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, Calendar, User, ExternalLink, Bookmark, Download } from 'lucide-react';
 
 const PaperDetail = ({ paper }) => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     return (
         <div className="bg-white dark:bg-gray-900 rounded-[3rem] border border-gray-100 dark:border-gray-800 p-10 md:p-16 shadow-2xl shadow-blue-500/5 relative overflow-hidden transition-all duration-300">
             {/* Background Accent */}
@@ -57,7 +58,7 @@ const PaperDetail = ({ paper }) => {
                         {paper.doi && (
                             <div className="flex gap-4">
                                 <a
-                                    href={`http://127.0.0.1:8000/api/papers/download/${paper.id}`}
+                                    href={`${API_BASE}/api/papers/download/${paper.id}`}
                                     className="flex items-center gap-2 text-sm font-bold text-green-600 dark:text-green-400 hover:underline"
                                 >
                                     <Download className="w-4 h-4" />

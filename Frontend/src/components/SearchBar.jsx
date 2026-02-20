@@ -3,6 +3,7 @@ import { Search, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const SearchBar = ({ onSearch, isLoading: externalLoading }) => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const [query, setQuery] = useState('');
     const [selectedDatabases, setSelectedDatabases] = useState(['arxiv']);
     const [isSearching, setIsSearching] = useState(false);
@@ -17,7 +18,7 @@ const SearchBar = ({ onSearch, isLoading: externalLoading }) => {
         if (onSearch) onSearch(searchQuery);
 
         try {
-            const response = await fetch("http://127.0.0.1:8000/api/search", {
+            const response = await fetch(`${API_BASE}/api/search`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",

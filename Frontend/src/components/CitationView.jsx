@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Quote, Check, Copy, ChevronDown, Loader2 } from 'lucide-react';
 
 const CitationView = ({ paper }) => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const [selectedFormat, setSelectedFormat] = useState('APA');
     const [citationText, setCitationText] = useState('');
     const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ const CitationView = ({ paper }) => {
             try {
                 // Encode paper ID to handle special characters (like slashes in DOIs/IDs)
                 const encodedId = encodeURIComponent(paper.id);
-                const response = await fetch(`http://127.0.0.1:8000/api/papers/${encodedId}/citation?format=${selectedFormat}`);
+                const response = await fetch(`${API_BASE}/api/papers/${encodedId}/citation?format=${selectedFormat}`);
 
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));

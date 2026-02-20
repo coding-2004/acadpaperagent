@@ -3,6 +3,7 @@ import { Sparkles, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const RelatedPapers = ({ paperId }) => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const [relatedPapers, setRelatedPapers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -17,7 +18,7 @@ const RelatedPapers = ({ paperId }) => {
 
             try {
                 const encodedId = encodeURIComponent(paperId);
-                const response = await fetch(`http://127.0.0.1:8000/api/papers/${encodedId}/related`);
+                const response = await fetch(`${API_BASE}/api/papers/${encodedId}/related`);
 
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
@@ -86,8 +87,8 @@ const RelatedPapers = ({ paperId }) => {
                         >
                             <div className="flex justify-between items-start mb-4">
                                 <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${paper.similarity >= 90 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                        paper.similarity >= 75 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                                            'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                                    paper.similarity >= 75 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                        'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
                                     }`}>
                                     {paper.similarity}% Match
                                 </span>

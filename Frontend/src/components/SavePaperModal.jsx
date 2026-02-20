@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Bookmark, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const SavePaperModal = ({ paper, isOpen, onClose, onSave }) => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const [readingLists, setReadingLists] = useState([]);
     const [selectedList, setSelectedList] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +19,7 @@ const SavePaperModal = ({ paper, isOpen, onClose, onSave }) => {
 
     const fetchReadingLists = async () => {
         try {
-            const response = await fetch('http://127.0.0.1:8000/api/reading-lists');
+            const response = await fetch(`${API_BASE}/api/reading-lists`);
             const data = await response.json();
             setReadingLists(data.lists || []);
         } catch (error) {
@@ -30,7 +31,7 @@ const SavePaperModal = ({ paper, isOpen, onClose, onSave }) => {
         setIsLoading(true);
         setStatus('loading');
         try {
-            const response = await fetch(`http://127.0.0.1:8000/api/papers/save`, {
+            const response = await fetch(`${API_BASE}/api/papers/save`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

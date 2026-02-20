@@ -6,6 +6,7 @@ import CreateListModal from '../components/CreateListModal';
 import { Plus, BookOpen, Loader2, AlertCircle } from 'lucide-react';
 
 const ReadingLists = () => {
+    const API_BASE = import.meta.env.VITE_API_URL;
     const [lists, setLists] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -15,7 +16,7 @@ const ReadingLists = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const response = await fetch('http://127.0.0.1:8000/api/reading-lists');
+            const response = await fetch(`${API_BASE}/api/reading-lists`);
             if (!response.ok) throw new Error("Failed to fetch reading lists");
             const data = await response.json();
             setLists(data.lists || []);
@@ -35,7 +36,7 @@ const ReadingLists = () => {
         if (!window.confirm("Are you sure you want to delete this list? Saved papers will be unassigned.")) return;
 
         try {
-            const response = await fetch(`http://127.0.0.1:8000/api/reading-lists/${id}`, {
+            const response = await fetch(`${API_BASE}/api/reading-lists/${id}`, {
                 method: 'DELETE'
             });
             if (response.ok) {
