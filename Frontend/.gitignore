@@ -24,3 +24,4 @@ dist-ssr
 *.sw?
 # Database
 Backend/papers.db
+.env
